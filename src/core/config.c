@@ -1,6 +1,7 @@
 #include "config.h"
 #include "xdpw.h"
 #include "logger.h"
+#include "screencast_common.h"
 
 #include <dictionary.h>
 #include <stdio.h>
@@ -11,6 +12,8 @@
 
 void print_config(enum LOGLEVEL loglevel, struct xdpw_config *config) {
 	logprint(loglevel, "config: outputname  %s", config->screencast_conf.output_name);
+	logprint(loglevel, "config: chooser_cmd: %s\n", config->screencast_conf.chooser_cmd);
+	logprint(loglevel, "config: chooser_type: %s\n", print_chooser_type(config->screencast_conf.chooser_type));
 }
 
 // NOTE: calling finish_config won't prepare the config to be read again from config file
@@ -70,6 +73,11 @@ static void config_parse_file(const char *configfile, struct xdpw_config *config
 
 	// screencast
 	getstring_from_conffile(d, "screencast:output_name", &config->screencast_conf.output_name, NULL);
+	getstring_from_conffile(d, "screencast:chooser_cmd", &config->screencast_conf.chooser_cmd, NULL);
+	char *chooser_type = NULL;
+	getstring_from_conffile(d, "screencast:chooser_type", &chooser_type, "none");
+	config->screencast_conf.chooser_type = get_chooser_type(chooser_type);
+	free(chooser_type);
 
 	iniparser_freedict(d);
 	logprint(DEBUG, "config: config file parsed");

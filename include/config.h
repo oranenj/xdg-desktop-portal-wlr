@@ -2,9 +2,12 @@
 #define CONFIG_H
 
 #include "logger.h"
+#include "screencast_common.h"
 
 struct config_screencast {
 	char *output_name;
+	char *chooser_cmd;
+	enum xdpw_chooser_types chooser_type;
 };
 
 struct xdpw_config {

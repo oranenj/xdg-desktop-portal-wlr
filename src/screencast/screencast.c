@@ -48,19 +48,10 @@ int setup_outputs(struct xdpw_screencast_context *ctx, struct xdpw_session *sess
 	}
 
 	struct xdpw_wlr_output *out;
-	if (ctx->state->config->screencast_conf.output_name) {
-		out = xdpw_wlr_output_find_by_name(&ctx->output_list,
-				ctx->state->config->screencast_conf.output_name);
-		if (!out) {
-			logprint(ERROR, "wlroots: no such output");
-			abort();
-		}
-	} else {
-		out = xdpw_wlr_output_first(&ctx->output_list);
-		if (!out) {
-			logprint(ERROR, "wlroots: no output found");
-			abort();
-		}
+	out = xdpw_wlr_output_chooser(ctx);
+	if (!out) {
+		logprint(ERROR, "wlroots: no output found");
+		return 1;
 	}
 
 	struct xdpw_screencast_instance *cast, *tmp_c;
@@ -272,22 +263,24 @@ static int method_screencast_select_sources(sd_bus_message *msg, void *data,
 		return ret;
 	}
 
-	ret = -1;
+	int output_selection_canceled = 1;
 	wl_list_for_each_reverse_safe(sess, tmp_s, &state->xdpw_sessions, link) {
 		if (strcmp(sess->session_handle, session_handle) == 0) {
 				logprint(DEBUG, "dbus: select sources: found matching session %s", sess->session_handle);
-				ret = setup_outputs(ctx, sess, cursor_embedded);
+				output_selection_canceled = setup_outputs(ctx, sess, cursor_embedded);
 		}
 	}
-	if (ret < 0) {
-		return ret;
-	}
 
+	ret = -1;
 	ret = sd_bus_message_new_method_return(msg, &reply);
 	if (ret < 0) {
 		return ret;
 	}
-	ret = sd_bus_message_append(reply, "ua{sv}", PORTAL_RESPONSE_SUCCESS, 0);
+	if (output_selection_canceled == 1) {
+		ret = sd_bus_message_append(reply, "ua{sv}", PORTAL_RESPONSE_CANCELLED, 0);
+	} else {
+		ret = sd_bus_message_append(reply, "ua{sv}", PORTAL_RESPONSE_SUCCESS, 0);
+	}
 	if (ret < 0) {
 		return ret;
 	}
