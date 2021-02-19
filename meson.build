@@ -13,6 +13,7 @@ add_project_arguments(cc.get_supported_arguments([
 	'-Wno-missing-braces',
 	'-Wno-missing-field-initializers',
 	'-Wno-unused-parameter',
+	'-Werror=maybe-uninitialized',
 	'-D_POSIX_C_SOURCE=200809L',
 ]), language: 'c')
 
