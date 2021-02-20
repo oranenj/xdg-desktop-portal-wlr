@@ -333,8 +333,6 @@ static bool exec_chooser(char *cmd, bool readin, int p1[2], int p2[2]) {
 
 		if (err == -1) {
 			perror("execl");
-			logprint(WARN, "Failed to execute %s", cmd);
-			return false;
 		}
 		exit(127);
 	}
@@ -342,14 +340,22 @@ static bool exec_chooser(char *cmd, bool readin, int p1[2], int p2[2]) {
 	close(p1[0]);
 	close(p2[1]);
 
-	wait(NULL);
-
-	return true;
+	int status;
+	wait(&status);
+	if (WIFEXITED(status)) {
+		if (WEXITSTATUS(status) == 127) {
+			return false;
+		} else {
+			return true;
+		}
+	}
+	return false;
 }
 
-struct xdpw_wlr_output *wlr_output_chooser(struct xdpw_output_chooser *chooser, struct wl_list *output_list) {
+static bool wlr_output_chooser(struct xdpw_output_chooser *chooser,
+		struct wl_list *output_list, struct xdpw_wlr_output **output) {
 	logprint(DEBUG, "wlroots: output chooser called");
-	struct xdpw_wlr_output *output, *tmp;
+	struct xdpw_wlr_output *out, *tmp;
 	size_t namelength = 0;
 	char *name = NULL;
 	bool readin = false;
@@ -361,14 +367,16 @@ struct xdpw_wlr_output *wlr_output_chooser(struct xdpw_output_chooser *chooser, 
 	if (pipe(p1) == -1) {
 		perror("pipe1");
 		logprint(ERROR, "Failed to open pipe1");
-		return NULL;
+		*output = NULL;
+		return false;
 	}
 	if (pipe(p2) == -1) {
 		perror("pipe2");
 		logprint(ERROR, "Failed to open pipe2");
 		close(p1[0]);
 		close(p1[1]);
-		return NULL;
+		*output = NULL;
+		return false;
 	}
 
 	if (chooser->type == XDPW_CHOOSER_DMENU) {
@@ -380,16 +388,15 @@ struct xdpw_wlr_output *wlr_output_chooser(struct xdpw_output_chooser *chooser, 
 			close(p1[1]);
 			close(p2[0]);
 			close(p2[1]);
-			return NULL;
+			*output = NULL;
+			return false;
 		}
-		struct xdpw_wlr_output *output, *tmp;
-		wl_list_for_each_safe(output, tmp, output_list, link) {
-			fprintf(f, "%s\n", output->name);
+		wl_list_for_each_safe(out, tmp, output_list, link) {
+			fprintf(f, "%s\n", out->name);
 		}
 		fclose(f);
 		readin = true;
-	}
-	else {
+	} else {
 		close(p1[1]);
 	}
 
@@ -400,13 +407,16 @@ struct xdpw_wlr_output *wlr_output_chooser(struct xdpw_output_chooser *chooser, 
 			perror("fdopen pipe2");
 			logprint(ERROR, "Failed to open pipe2 for reading");
 			close(p2[0]);
-			return NULL;
+			*output = NULL;
+			return true;
 		}
+
 		ssize_t nread = getline(&name, &namelength, f);
 		if (nread < 0) {
 			perror("getline failed");
 			fclose(f);
-			return NULL;
+			*output = NULL;
+			return true;
 		}
 		fclose(f);
 
@@ -417,22 +427,24 @@ struct xdpw_wlr_output *wlr_output_chooser(struct xdpw_output_chooser *chooser, 
 		}
 
 		logprint(TRACE, "wlroots: output chooser %s selects output %s", chooser->cmd, name);
-		wl_list_for_each_safe(output, tmp, output_list, link) {
-			if (strcmp(output->name, name) == 0) {
+		wl_list_for_each_safe(out, tmp, output_list, link) {
+			if (strcmp(out->name, name) == 0) {
 				free(name);
-				return output;
+				*output = out;
+				return true;
 			}
 		}
-	}
-	else {
+		free(name);
+		*output = NULL;
+		return true;
+	} else {
 		close(p2[0]);
+		*output = NULL;
+		return false;
 	}
-
-	free(name);
-	return NULL;
 }
 
-struct xdpw_wlr_output *wlr_output_chooser_default(struct wl_list *output_list) {
+static struct xdpw_wlr_output *wlr_output_chooser_default(struct wl_list *output_list) {
 	logprint(DEBUG, "wlroots: output chooser called");
 	struct xdpw_output_chooser default_chooser[] = {
 		{XDPW_CHOOSER_SIMPLE, "slurp -f %o -o"},
@@ -441,15 +453,23 @@ struct xdpw_wlr_output *wlr_output_chooser_default(struct wl_list *output_list) 
 	};
 
 	int N = sizeof(default_chooser)/sizeof(default_chooser[0]);
-	struct xdpw_wlr_output *output;
+	struct xdpw_wlr_output *output = NULL;
+	bool ret;
 	for (int i = 0; i<N; i++) {
-		output = wlr_output_chooser(&default_chooser[i], output_list);
+		ret = wlr_output_chooser(&default_chooser[i], output_list, &output);
+		if (!ret) {
+			logprint(DEBUG, "wlroots: output chooser %s not found. Trying next one.",
+					default_chooser[i].cmd);
+			continue;
+		}
 		if (output != NULL) {
 			logprint(DEBUG, "wlroots: output chooser selects %s", output->name);
-			return output;
+		} else {
+			logprint(DEBUG, "wlroots: output chooser canceled");
 		}
+		return output;
 	}
-	return NULL;
+	return xdpw_wlr_output_first(output_list);
 }
 
 struct xdpw_wlr_output *xdpw_wlr_output_chooser(struct xdpw_screencast_context *ctx) {
@@ -463,14 +483,19 @@ struct xdpw_wlr_output *xdpw_wlr_output_chooser(struct xdpw_screencast_context *
 		}
 		return xdpw_wlr_output_first(&ctx->output_list);
 	} else {
-		struct xdpw_wlr_output *output;
+		struct xdpw_wlr_output *output = NULL;
 		if (ctx->state->config->screencast_conf.chooser_cmd != NULL) {
 			struct xdpw_output_chooser chooser = {
 				ctx->state->config->screencast_conf.chooser_type,
 				ctx->state->config->screencast_conf.chooser_cmd
 			};
 			logprint(DEBUG, "wlroots: output chooser %s (%d)", chooser.cmd, chooser.type);
-			output = wlr_output_chooser(&chooser, &ctx->output_list);
+			bool ret;
+			ret = wlr_output_chooser(&chooser, &ctx->output_list, &output);
+			if (!ret) {
+				logprint(ERROR, "wlroots: output chooser %s failed", chooser.cmd);
+				return NULL;
+			}
 			if (output != NULL) {
 				logprint(DEBUG, "wlroots: output chooser selects %s", output->name);
 				return output;
