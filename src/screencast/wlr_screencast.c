@@ -473,36 +473,39 @@ static struct xdpw_wlr_output *wlr_output_chooser_default(struct wl_list *output
 }
 
 struct xdpw_wlr_output *xdpw_wlr_output_chooser(struct xdpw_screencast_context *ctx) {
-	if (ctx->state->config->screencast_conf.chooser_type == XDPW_CHOOSER_NONE) {
+	if (ctx->state->config->screencast_conf.chooser_type == XDPW_CHOOSER_DEFAULT) {
+		return wlr_output_chooser_default(&ctx->output_list);
+	} else if (ctx->state->config->screencast_conf.chooser_type == XDPW_CHOOSER_NONE) {
 		struct xdpw_wlr_output *output = NULL;
-		if (ctx->state->config->screencast_conf.output_name != NULL) {
+		if (ctx->state->config->screencast_conf.output_name) {
 			output = xdpw_wlr_output_find_by_name(&ctx->output_list, ctx->state->config->screencast_conf.output_name);
+		} else {
+			output = xdpw_wlr_output_first(&ctx->output_list);
 		}
-		if (output != NULL) {
-			return output;
-		}
-		return xdpw_wlr_output_first(&ctx->output_list);
+		return output;
 	} else {
 		struct xdpw_wlr_output *output = NULL;
-		if (ctx->state->config->screencast_conf.chooser_cmd != NULL) {
-			struct xdpw_output_chooser chooser = {
-				ctx->state->config->screencast_conf.chooser_type,
-				ctx->state->config->screencast_conf.chooser_cmd
-			};
-			logprint(DEBUG, "wlroots: output chooser %s (%d)", chooser.cmd, chooser.type);
-			bool ret;
-			ret = wlr_output_chooser(&chooser, &ctx->output_list, &output);
-			if (!ret) {
-				logprint(ERROR, "wlroots: output chooser %s failed", chooser.cmd);
-				return NULL;
-			}
-			if (output != NULL) {
-				logprint(DEBUG, "wlroots: output chooser selects %s", output->name);
-				return output;
-			}
+		if (!ctx->state->config->screencast_conf.chooser_cmd) {
+			logprint(ERROR, "wlroots: no output chooser given");
 			return NULL;
 		}
-		return wlr_output_chooser_default(&ctx->output_list);
+		struct xdpw_output_chooser chooser = {
+			ctx->state->config->screencast_conf.chooser_type,
+			ctx->state->config->screencast_conf.chooser_cmd
+		};
+		logprint(DEBUG, "wlroots: output chooser %s (%d)", chooser.cmd, chooser.type);
+		bool ret;
+		ret = wlr_output_chooser(&chooser, &ctx->output_list, &output);
+		if (!ret) {
+			logprint(ERROR, "wlroots: output chooser %s failed", chooser.cmd);
+			return NULL;
+		}
+		if (output) {
+			logprint(DEBUG, "wlroots: output chooser selects %s", output->name);
+		} else {
+			logprint(DEBUG, "wlroots: output chooser canceled");
+		}
+		return output;
 	}
 }
 

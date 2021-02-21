@@ -54,7 +54,9 @@ enum spa_video_format xdpw_format_pw_strip_alpha(enum spa_video_format format) {
 }
 
 enum xdpw_chooser_types get_chooser_type(const char *chooser_type) {
-	if (strcmp(chooser_type, "none") == 0) {
+	if (!chooser_type || strcmp(chooser_type, "default") == 0) {
+		return XDPW_CHOOSER_DEFAULT;
+	} else if (strcmp(chooser_type, "none") == 0) {
 		return XDPW_CHOOSER_NONE;
 	} else if (strcmp(chooser_type, "simple") == 0) {
 		return XDPW_CHOOSER_SIMPLE;
@@ -67,6 +69,8 @@ enum xdpw_chooser_types get_chooser_type(const char *chooser_type) {
 
 char *print_chooser_type(enum xdpw_chooser_types chooser_type) {
 	switch (chooser_type) {
+	case XDPW_CHOOSER_DEFAULT:
+		return "default";
 	case XDPW_CHOOSER_NONE:
 		return "none";
 	case XDPW_CHOOSER_SIMPLE:

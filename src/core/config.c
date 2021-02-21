@@ -75,7 +75,7 @@ static void config_parse_file(const char *configfile, struct xdpw_config *config
 	getstring_from_conffile(d, "screencast:output_name", &config->screencast_conf.output_name, NULL);
 	getstring_from_conffile(d, "screencast:chooser_cmd", &config->screencast_conf.chooser_cmd, NULL);
 	char *chooser_type = NULL;
-	getstring_from_conffile(d, "screencast:chooser_type", &chooser_type, "none");
+	getstring_from_conffile(d, "screencast:chooser_type", &chooser_type, "default");
 	config->screencast_conf.chooser_type = get_chooser_type(chooser_type);
 	free(chooser_type);
 
